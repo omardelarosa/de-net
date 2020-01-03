@@ -2,6 +2,8 @@
 
 ## Usage
 
+### OpenAI Gym Example
+
 ```
-python mnist-test.py --save-model --epochs 1
+python de-cartpole.py
 ```

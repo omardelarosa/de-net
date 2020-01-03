@@ -1,1 +1,7 @@
+envs/
 data/
+.ipynb_checkpoints
+.vscode
+examples
+*.pt
+.DS_Store
