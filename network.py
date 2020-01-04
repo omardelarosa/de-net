@@ -29,7 +29,7 @@ class Net(nn.Sequential):
         self.min_weights = None
 
     def forward(self, x):
-        x = torch.sigmoid(self.fc1(x))
+        x = self.fc1(x)
         x = self.fc2(x)
         x = torch.sigmoid(self.fc3(x))
         return x
