@@ -1,6 +1,6 @@
 # DENet
 
-These are examples of neural network architectures designed to use [DE (Differential Evolution)](https://en.wikipedia.org/wiki/Differential_evolution) rather than gradient descent for updating weights. It's designed to be testable using [OpenAI Gym RL (reinforcement learning) environments](https://gym.openai.com/docs/).
+These are examples of neural network architectures built using [PyTorch](https://pytorch.org/) designed to use [DE (Differential Evolution)](https://en.wikipedia.org/wiki/Differential_evolution) rather than gradient descent for updating weights. It's designed to be testable using [OpenAI Gym RL (reinforcement learning) environments](https://gym.openai.com/docs/).
 
 It relies a custom pip package called [devo](https://github.com/omardelarosa/Adaptive-DEs) which is a fork of [gzjj05/Adaptive-DEs](https://github.com/gzjj05/Adaptive-DEs).
 
