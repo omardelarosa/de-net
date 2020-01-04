@@ -29,11 +29,15 @@ class Net(nn.Sequential):
         self.min_weights = None
 
     def forward(self, x):
-        x = self.fc1(x)
-        x = self.fc2(x)
+        x = torch.sigmoid(self.fc1(x))
+        x = torch.sigmoid(self.fc2(x))
         x = torch.sigmoid(self.fc3(x))
         return x
         # return F.log_softmax(x, dim=1)
+
+    def backward(self, population_best_fit_individual):
+        self.update_weights_from_vec(population_best_fit_individual)
+        return None
 
     def flatten(self):
         flattened = self._flatten_all()
