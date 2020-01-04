@@ -1,8 +1,12 @@
-# DENet - Differential Evolution + Neural Networks
+# DENet
 
-This is a neural network designed to use Differential Evolution rather than gradient descent for updating its weights.
+These are examples of neural network architectures designed to use [DE (Differential Evolution)](https://en.wikipedia.org/wiki/Differential_evolution) rather than gradient descent for updating weights. It's designed to be testable using [OpenAI Gym RL (reinforcement learning) environments](https://gym.openai.com/docs/).
+
+It relies a custom pip package called [devo](https://github.com/omardelarosa/Adaptive-DEs) which is a fork of [gzjj05/Adaptive-DEs](https://github.com/gzjj05/Adaptive-DEs).
 
 ## Installation
+
+It's recommended you use `pipenv` and `pyenv` for this project to ensure dependecies match.
 
 ```bash
 pipenv install
@@ -11,8 +15,11 @@ pipenv shell
 
 ## Usage
 
+It's recommended to begin with `CartPole-v0` example, since results vary wildly with other environments.
+
 ```
-python de-net.py -husage: de-net.py [-h] [--save-model] [--steps STEPS] [--episodes EPISODES]
+python de-net.py -h
+usage: de-net.py [-h] [--save-model] [--steps STEPS] [--episodes EPISODES]
                  [--load-model] [--optimizer-name OPTIMIZER_NAME]
                  [--log-level LOG_LEVEL] [--maximize] [--should-test]
                  [--env-name ENV_NAME] [--from-file FROM_FILE]
