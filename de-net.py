@@ -271,7 +271,7 @@ if __name__ == '__main__':
                         help='Choose crossover rate for devo optimizer (default: {})'.format(DEFAULT_CROSS_OVER_RATE))
     parser.add_argument('--scaling-factor', type=float, default=DEFAULT_SCALING_FACTOR,
                         help='Choose scaling factor for devo optimizer (default: {})'.format(DEFAULT_SCALING_FACTOR))
-    parser.add_argument('--population-size', type=float, default=DEFAULT_POPULATION_SIZE,
+    parser.add_argument('--population-size', type=int, default=DEFAULT_POPULATION_SIZE,
                         help='Choose population size for devo optimizer (default: {})'.format(DEFAULT_POPULATION_SIZE))
     parser.add_argument('--batch-size', type=int, default=DEFAULT_BATCH_SIZE,
                         help='Choose batch size of actions during episode (default: {})'.format(
