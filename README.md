@@ -76,5 +76,5 @@ python de-net.py --steps=1000 --episodes=5000 --should-test --optimizer-name=DE 
 This can executed and loaded using:
 
 ```
-python de-net.py --from-file=saved_models/DE_s1000_e5000_CartPole-v0_p30_b50_reward_sum --load-model
+python de-net.py --steps=1000 --episodes=5000 --should-test --optimizer-name=DE --population-size=30 --batch-size=50 --from-file=saved_models/DE_s1000_e5000_CartPole-v0_p30_b50_reward_sum --load-model
 ```
