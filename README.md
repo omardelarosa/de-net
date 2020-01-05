@@ -18,7 +18,6 @@ pipenv shell
 It's recommended to begin with `CartPole-v0` example, since results vary wildly with other environments.
 
 ```
-python de-net.py -h
 usage: de-net.py [-h] [--save-model] [--steps STEPS] [--episodes EPISODES]
                  [--load-model] [--optimizer-name OPTIMIZER_NAME]
                  [--log-level LOG_LEVEL] [--maximize] [--should-test]
@@ -26,6 +25,7 @@ usage: de-net.py [-h] [--save-model] [--steps STEPS] [--episodes EPISODES]
                  [--crossover-rate CROSSOVER_RATE]
                  [--scaling-factor SCALING_FACTOR]
                  [--population-size POPULATION_SIZE] [--batch-size BATCH_SIZE]
+                 [--reward-reducer REWARD_REDUCER]
                  [--hidden-layer-size HIDDEN_LAYER_SIZE]
 
 PyTorch Adaptive-DEs Example
@@ -34,7 +34,8 @@ optional arguments:
   -h, --help            show this help message and exit
   --save-model          For Saving the current Model
   --steps STEPS         Steps per episode (default: 300)
-  --episodes EPISODES   Number of episodes per objective functtion run (default: 1000)
+  --episodes EPISODES   Number of episodes per objective functtion run
+                        (default: 1000)
   --load-model          Load from saved model
   --optimizer-name OPTIMIZER_NAME
                         Choose a devo Adaptive-DE optimizer (['DE', 'jDE',
@@ -60,12 +61,18 @@ optional arguments:
   --batch-size BATCH_SIZE
                         Choose batch size of actions during episode (default:
                         40)
+  --reward-reducer REWARD_REDUCER
+                        Reducer function for episode rewards (default: sum,
+                        options: ['sum', 'mean', 'max', 'time_scaled_sum',
+                        'time_scaled_mean'])
   --hidden-layer-size HIDDEN_LAYER_SIZE
                         Choose hidden layer size of actions during episode
                         (default: 40)
 ```
 
 ## Examples
+
+![CartPole example](images/cartpole_example.mov.gif)
 
 So far my best performing `CartPole-v0` model was generated using the following hyperparameters:
 

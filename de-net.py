@@ -24,10 +24,11 @@ DEFAULT_BATCH_SIZE = 40
 DEFAULT_HIDDEN_LAYER_SIZE = 40
 DEFAULT_LOG_LEVEL = 1
 SUPPORTED_DE_OPTIMIZERS = ['DE', 'jDE', 'SHADE', 'LSHADE', 'JADE', 'CoDE']
+REWARD_REDUCERS = ['sum', 'mean', 'max', 'time_scaled_sum', 'time_scaled_mean']
 
 
 class Agent():
-    def __init__(self, env, steps_per_episode, should_maximize):
+    def __init__(self, env, steps_per_episode, should_maximize, reward_reducer_type):
         self.reward_inversion = should_maximize
         self.min_reward = float('inf')
         self.min_weights = None
@@ -38,6 +39,7 @@ class Agent():
         self.env = env
         self.model = None
         self.memory = None
+        self.reward_reducer_type = reward_reducer_type
         self.log_level = 0
 
     def attach_model(self, model):
@@ -46,6 +48,8 @@ class Agent():
 
     def init_memory(self, model):
         # actions played memory
+
+        # TODO: parameterize these two options
 
         # Init randomly
         self.memory = np.random.uniform(-1.0, 1.0,
@@ -133,14 +137,33 @@ class Agent():
                         t+1, reward, info))
                 break
 
+        reward_time_scaled = [rewards[i] / (i + 1)
+                              for i in range(episode_duration)]
         reward_sum = sum(rewards)
+        reward_max = max(rewards)
+        reward_time_scaled_sum = sum(reward_time_scaled)
         avg_reward = reward_sum / episode_duration
+        if self.log_level > 2:
+            print("t:{}, \n\tobservations: {}, \n\tactions: {}, \n\trewards".format(
+                self.t, observations, y, rewards))
 
-        # NOTE: Three stratgies for handling rewards:
+        # NOTE: Various stratgies for handling rewards:
+        reward_values = [
+            reward_sum,  # the sum of all rewards for the episode
+            avg_reward,  # use mean reward as output, ignores time
+            reward_max,  # the maximum reward value for the episode
+            reward_time_scaled_sum,  # the time scaled sum of rewards
+            reward_time_scaled_sum / episode_duration  # the time scaled mean of rewards
+        ]
 
-        # resulting_reward = avg_reward # use avg reward as output, ignores time ?
-        resulting_reward = reward_sum  # use sum reward as output
-        # resulting_reward = avg_reward * episode_duration # avg reward weighted by time survived
+        if self.reward_reducer_type in REWARD_REDUCERS:
+            resulting_reward = reward_values[REWARD_REDUCERS.index(
+                self.reward_reducer_type)]
+        else:
+            if self.log_level > 1:
+                print("Warning: reward reducer type not found: ",
+                      self.reward_reducer_type, ".  Using default 'sum'")
+            resulting_reward = reward_values[0]
 
         # save latest observations to memory
         self.memory = observations
@@ -172,7 +195,7 @@ def run(args):
     # H is hidden layer dimension; D_out is output action space dimension.
     N, D_in, H, D_out = args.batch_size, observation.shape[0], 40, 1
 
-    agent = Agent(env, steps_per_episode, args.maximize)
+    agent = Agent(env, steps_per_episode, args.maximize, args.reward_reducer)
     model = Net(N, D_in, H, D_out, agent)
 
     # set log level
@@ -285,7 +308,8 @@ if __name__ == '__main__':
                         help='Choose batch size of actions during episode (default: {})'.format(
                             DEFAULT_BATCH_SIZE)
                         )
-
+    parser.add_argument('--reward-reducer', type=str, default=REWARD_REDUCERS[0],
+                        help='Reducer function for episode rewards (default: {}, options: {})'.format(REWARD_REDUCERS[0], REWARD_REDUCERS))
     parser.add_argument('--hidden-layer-size', type=int, default=DEFAULT_HIDDEN_LAYER_SIZE,
                         help='Choose hidden layer size of actions during episode (default: {})'.format(
                             DEFAULT_HIDDEN_LAYER_SIZE)
