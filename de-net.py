@@ -48,11 +48,11 @@ class Agent():
         # actions played memory
 
         # Init randomly
-        # self.memory = np.random.uniform(-1.0, 1.0,
-        #                                 (model.N, model.D_in))
+        self.memory = np.random.uniform(-1.0, 1.0,
+                                        (model.N, model.D_in))
 
         # Init zeros
-        self.memory = np.zeros((model.N, model.D_in))
+        # self.memory = np.zeros((model.N, model.D_in))
 
     # DE stuff
     def objective_func(self, vec, dimension):
@@ -69,7 +69,7 @@ class Agent():
 
         nans = weights_vec[np.isnan(weights_vec)]
 
-        # print("nans", nans)
+        # TODO: investigate cause of nan values
         if len(nans) > 0:
             if self.log_level > 1:
                 print("Weights:", weights_vec)
@@ -112,6 +112,8 @@ class Agent():
             x_t = torch.from_numpy(observations).float()
             y = model(x_t)  # get action list
             action_f = y[-1].item()  # get last action in list
+
+            # TODO: investigate the cause of nan values
             if math.isnan(action_f):
                 if self.log_level > 1:
                     print("Warning: action is nan -- ", y)
@@ -124,7 +126,7 @@ class Agent():
             observations = np.concatenate(
                 (observations[1:, ], np.expand_dims(observation, axis=0)))
 
-            rewards.append(reward / (t + 1))  # discount reward over time
+            rewards.append(reward)  # TODO: update reward over time somehow?
             if done:
                 if should_render:
                     print("Episode finished after {} steps. reward: {}, info: {}".format(
@@ -134,14 +136,20 @@ class Agent():
         reward_sum = sum(rewards)
         avg_reward = reward_sum / episode_duration
 
+        # NOTE: Three stratgies for handling rewards:
+
+        # resulting_reward = avg_reward # use avg reward as output, ignores time ?
+        resulting_reward = reward_sum  # use sum reward as output
+        # resulting_reward = avg_reward * episode_duration # avg reward weighted by time survived
+
         # save latest observations to memory
         self.memory = observations
 
-        # When maximizing, rewards need to be inverted
+        # When games require inverted rewards or "maximize" flag is used
         if self.reward_inversion:
-            return -avg_reward
+            return -resulting_reward
         else:
-            return avg_reward
+            return resulting_reward
 
     # Run forever
     def run_forever(self, steps=100000):
