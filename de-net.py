@@ -17,8 +17,8 @@ from network import Net
 
 DEFAULT_MODEL_OUT_FILE = "data/de-nn-model.pt"
 DEFAULT_GYM_ENV = "CartPole-v0"
-DEFAULT_CROSS_OVER_RATE = 0.7
-DEFAULT_SCALING_FACTOR = 1e-4
+DEFAULT_CROSS_OVER_RATE = 0.1
+DEFAULT_SCALING_FACTOR = 0.1
 DEFAULT_POPULATION_SIZE = 30
 DEFAULT_BATCH_SIZE = 40
 DEFAULT_HIDDEN_LAYER_SIZE = 40
@@ -45,6 +45,9 @@ class Agent():
     def attach_model(self, model):
         self.model = model
         self.init_memory(model)
+
+        self.out_population = None
+        self.out_fitnesses = None
 
     def init_memory(self, model):
         # actions played memory
@@ -84,6 +87,7 @@ class Agent():
 
         # run with new values
         reward = -self.run_episode(self.steps_per_episode)
+
         if self.t % 100 == 0:
             if self.log_level > 0:
                 print("{}: reward: {}".format(self.t, reward))
@@ -114,15 +118,19 @@ class Agent():
             if should_render or t % 20 == 0:
                 env.render()
             x_t = torch.from_numpy(observations).float()
+            # print("Observations: ", observations)
+            # for p in model.named_parameters():
+            #     print("p: ", p)
             y = model(x_t)  # get action list
+            # print("Y: ", y)
             action_f = y[-1].item()  # get last action in list
 
-            # TODO: investigate the cause of nan values
+            # # TODO: investigate the cause of nan values
             if math.isnan(action_f):
                 if self.log_level > 1:
                     print("Warning: action is nan -- ", y)
                     print(" x_t --- ", x_t)
-                return 0.0
+                return -200.0
             action = round(action_f)
             observation, reward, done, info = env.step(action)
 
@@ -146,33 +154,37 @@ class Agent():
         if self.log_level > 2:
             print("t:{}, \n\tobservations: {}, \n\tactions: {}, \n\trewards".format(
                 self.t, observations, y, rewards))
+        # print("rewards", rewards)
 
-        # NOTE: Various stratgies for handling rewards:
-        reward_values = [
-            reward_sum,  # the sum of all rewards for the episode
-            avg_reward,  # use mean reward as output, ignores time
-            reward_max,  # the maximum reward value for the episode
-            reward_time_scaled_sum,  # the time scaled sum of rewards
-            reward_time_scaled_sum / episode_duration  # the time scaled mean of rewards
-        ]
+        # TODO: fixme
+        return sum(rewards)
 
-        if self.reward_reducer_type in REWARD_REDUCERS:
-            resulting_reward = reward_values[REWARD_REDUCERS.index(
-                self.reward_reducer_type)]
-        else:
-            if self.log_level > 1:
-                print("Warning: reward reducer type not found: ",
-                      self.reward_reducer_type, ".  Using default 'sum'")
-            resulting_reward = reward_values[0]
+        # # NOTE: Various stratgies for handling rewards:
+        # reward_values = [
+        #     reward_sum,  # the sum of all rewards for the episode
+        #     avg_reward,  # use mean reward as output, ignores time
+        #     reward_max,  # the maximum reward value for the episode
+        #     reward_time_scaled_sum,  # the time scaled sum of rewards
+        #     reward_time_scaled_sum / episode_duration  # the time scaled mean of rewards
+        # ]
 
-        # save latest observations to memory
-        self.memory = observations
+        # if self.reward_reducer_type in REWARD_REDUCERS:
+        #     resulting_reward = reward_values[REWARD_REDUCERS.index(
+        #         self.reward_reducer_type)]
+        # else:
+        #     if self.log_level > 1:
+        #         print("Warning: reward reducer type not found: ",
+        #               self.reward_reducer_type, ".  Using default 'sum'")
+        #     resulting_reward = reward_values[0]
 
-        # When games require inverted rewards or "maximize" flag is used
-        if self.reward_inversion:
-            return -resulting_reward
-        else:
-            return resulting_reward
+        # # save latest observations to memory
+        # self.memory = observations
+
+        # # When games require inverted rewards or "maximize" flag is used
+        # if self.reward_inversion:
+        #     return -resulting_reward
+        # else:
+        #     return resulting_reward
 
     # Run forever
     def run_forever(self, steps=100000):
@@ -181,8 +193,19 @@ class Agent():
             print("Reward result:", result)
 
     def results_callback(self, population, fitness_values, population_size, problem_size):
-        print("Completed training.")
-        return None
+
+        # Store results to python memory containers
+        # Store population
+        for i in range(0, population_size * problem_size):
+            row = i // problem_size
+            col = i % problem_size
+            self.out_population[row][col] = population[i]
+
+        # Store fitness values
+        for j in range(0, population_size):
+            f = fitness_values[j]
+            self.out_fitnesses[j] = f
+        return
 
 
 def run(args):
@@ -237,23 +260,55 @@ def run(args):
     y_c = y.detach().numpy().ctypes.data_as(
         c.POINTER(c.c_double))  # c pointer init fitness values
 
+    agent.out_population = x.detach().numpy()
+    agent.out_fitnesses = y.detach().numpy()
+
     # TODO: make these adjustable
     optimizer = getattr(devo, args.optimizer_name)
 
+    generations = episodes_num // population_size
+
+    # for g in range(generations):
     # # Using Adaptive-DEs
-    optimizer.run(
-        episodes_num,
-        population_size,  # population size
-        scaling_factor,  # scaling factor
-        crossover_rate,  # crossover rate
-        agent.objective_func,
-        problem_size,  # problem size
-        -100,  # unused value
-        100,  # unused value
-        x_c,
-        y_c,
-        agent.results_callback  # no results callback needed
-    )
+    # optimizer.run(
+    #     episodes_num,
+    #     population_size,  # population size
+    #     scaling_factor,  # scaling factor
+    #     crossover_rate,  # crossover rate
+    #     agent.objective_func,
+    #     problem_size,  # problem size
+    #     -100,  # unused value
+    #     100,  # unused value
+    #     x_c,
+    #     y_c,
+    #     agent.results_callback  # no results callback needed
+    # )
+
+    x_c = agent.out_population.ctypes.data_as(
+        c.POINTER(c.c_double))
+    y_c = agent.out_fitnesses.ctypes.data_as(
+        c.POINTER(c.c_double))
+
+    for g in range(generations):
+        # # Using Adaptive-DEs
+        optimizer.run(
+            population_size,
+            population_size,  # population size
+            scaling_factor,  # scaling factor
+            crossover_rate,  # crossover rate
+            agent.objective_func,
+            problem_size,  # problem size
+            -100,  # unused value
+            100,  # unused value
+            x_c,
+            y_c,
+            agent.results_callback  # no results callback needed
+        )
+
+        x_c = agent.out_population.ctypes.data_as(
+            c.POINTER(c.c_double))
+        y_c = agent.out_fitnesses.ctypes.data_as(
+            c.POINTER(c.c_double))
 
     # Get mins - inverted in output
     print("min_fitness: ", agent.min_reward)
