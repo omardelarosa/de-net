@@ -27,6 +27,7 @@ usage: de-net.py [-h] [--save-model] [--steps STEPS] [--episodes EPISODES]
                  [--population-size POPULATION_SIZE] [--batch-size BATCH_SIZE]
                  [--reward-reducer REWARD_REDUCER]
                  [--hidden-layer-size HIDDEN_LAYER_SIZE]
+                 [--recycle-population]
 
 PyTorch Adaptive-DEs Example
 
@@ -51,10 +52,10 @@ optional arguments:
                         nn-model.pt)
   --crossover-rate CROSSOVER_RATE
                         Choose crossover rate for devo optimizer (default:
-                        0.7)
+                        0.1)
   --scaling-factor SCALING_FACTOR
                         Choose scaling factor for devo optimizer (default:
-                        0.0001)
+                        0.1)
   --population-size POPULATION_SIZE
                         Choose population size for devo optimizer (default:
                         30)
@@ -68,6 +69,9 @@ optional arguments:
   --hidden-layer-size HIDDEN_LAYER_SIZE
                         Choose hidden layer size of actions during episode
                         (default: 40)
+  --recycle-population  Recycles population each generation and uses it as
+                        input for the next generation's initial population
+                        (default: False)
 ```
 
 ## Examples
