@@ -13,18 +13,33 @@ import numpy as np
 import ctypes as c
 import math
 import argparse
+import signal
+import sys
+import time
+import threading
+
 from network import Net
 
 DEFAULT_MODEL_OUT_FILE = "data/de-nn-model.pt"
 DEFAULT_GYM_ENV = "CartPole-v0"
-DEFAULT_CROSS_OVER_RATE = 0.7
-DEFAULT_SCALING_FACTOR = 1e-4
+DEFAULT_CROSS_OVER_RATE = 0.1
+DEFAULT_SCALING_FACTOR = 0.1
 DEFAULT_POPULATION_SIZE = 30
 DEFAULT_BATCH_SIZE = 40
 DEFAULT_HIDDEN_LAYER_SIZE = 40
 DEFAULT_LOG_LEVEL = 1
 SUPPORTED_DE_OPTIMIZERS = ['DE', 'jDE', 'SHADE', 'LSHADE', 'JADE', 'CoDE']
 REWARD_REDUCERS = ['sum', 'mean', 'max', 'time_scaled_sum', 'time_scaled_mean']
+
+# Handle keyboard interrupts properly while running C optimizers
+
+
+def signal_handler(signal, frame):
+    print("\nCanceled run.")
+    sys.exit(0)
+
+
+signal.signal(signal.SIGINT, signal_handler)
 
 
 class Agent():
@@ -46,6 +61,9 @@ class Agent():
         self.model = model
         self.init_memory(model)
 
+        self.out_population = None
+        self.out_fitnesses = None
+
     def init_memory(self, model):
         # actions played memory
 
@@ -62,10 +80,10 @@ class Agent():
     def objective_func(self, vec, dimension):
         model = self.model
         self.t = self.t + 1
-        weights_vec = np.zeros((dimension,), dtype='float32')
+        weights_vec = np.zeros((dimension,), dtype='float64')
         # gather data
         for i in range(dimension):
-            v = np.float32(vec[i])
+            v = np.float64(vec[i])
             if not math.isnan(v):
                 weights_vec[i] = v
             else:
@@ -84,6 +102,7 @@ class Agent():
 
         # run with new values
         reward = -self.run_episode(self.steps_per_episode)
+
         if self.t % 100 == 0:
             if self.log_level > 0:
                 print("{}: reward: {}".format(self.t, reward))
@@ -109,20 +128,24 @@ class Agent():
 
         rewards = []
         episode_duration = 0
+        total_steps = 0
+        max_steps = 200  # TODO: make this read from the steps value
         for t in range(steps):
             episode_duration += 1
             if should_render or t % 20 == 0:
                 env.render()
             x_t = torch.from_numpy(observations).float()
+
             y = model(x_t)  # get action list
+
             action_f = y[-1].item()  # get last action in list
 
-            # TODO: investigate the cause of nan values
+            # # TODO: investigate the cause of nan values
             if math.isnan(action_f):
                 if self.log_level > 1:
                     print("Warning: action is nan -- ", y)
                     print(" x_t --- ", x_t)
-                return 0.0
+                return -200.0
             action = round(action_f)
             observation, reward, done, info = env.step(action)
 
@@ -131,6 +154,7 @@ class Agent():
                 (observations[1:, ], np.expand_dims(observation, axis=0)))
 
             rewards.append(reward)  # TODO: update reward over time somehow?
+            total_steps = t
             if done:
                 if should_render:
                     print("Episode finished after {} steps. reward: {}, info: {}".format(
@@ -147,7 +171,7 @@ class Agent():
             print("t:{}, \n\tobservations: {}, \n\tactions: {}, \n\trewards".format(
                 self.t, observations, y, rewards))
 
-        # NOTE: Various stratgies for handling rewards:
+        # # NOTE: Various stratgies for handling rewards:
         reward_values = [
             reward_sum,  # the sum of all rewards for the episode
             avg_reward,  # use mean reward as output, ignores time
@@ -165,10 +189,14 @@ class Agent():
                       self.reward_reducer_type, ".  Using default 'sum'")
             resulting_reward = reward_values[0]
 
-        # save latest observations to memory
+        # # save latest observations to memory
         self.memory = observations
 
-        # When games require inverted rewards or "maximize" flag is used
+        # Scale based on duration
+        # TODO: penalize short runs - (max_steps - total_steps)
+        resulting_reward = resulting_reward
+
+        # # When games require inverted rewards or "maximize" flag is used
         if self.reward_inversion:
             return -resulting_reward
         else:
@@ -181,8 +209,19 @@ class Agent():
             print("Reward result:", result)
 
     def results_callback(self, population, fitness_values, population_size, problem_size):
-        print("Completed training.")
-        return None
+
+        # Store results to python memory containers
+        # Store population
+        for i in range(0, population_size * problem_size):
+            row = i // problem_size
+            col = i % problem_size
+            self.out_population[row][col] = np.float64(population[i])
+
+        # Store fitness values
+        for j in range(0, population_size):
+            f = fitness_values[j]
+            self.out_fitnesses[j] = np.float64(f)
+        return
 
 
 def run(args):
@@ -190,6 +229,7 @@ def run(args):
     observation = env.reset()
     steps_per_episode = args.steps
     model_file_output_path = args.from_file
+    should_recycle_population = args.recycle_population
 
     # N is episode steps length; D_in is input observation dimension;
     # H is hidden layer dimension; D_out is output action space dimension.
@@ -228,8 +268,8 @@ def run(args):
     print("problem_size: ", problem_size)
 
     # Initial population, Fitness values
-    x = torch.randn(population_size, problem_size)
-    y = torch.randn(population_size, D_out)
+    x = torch.randn(population_size, problem_size, dtype=torch.float64)
+    y = torch.randn(population_size, D_out, dtype=torch.float64)
 
     # Convert to c pointers
     x_c = x.detach().numpy().ctypes.data_as(
@@ -237,23 +277,52 @@ def run(args):
     y_c = y.detach().numpy().ctypes.data_as(
         c.POINTER(c.c_double))  # c pointer init fitness values
 
+    agent.out_population = x.detach().numpy()
+    agent.out_fitnesses = y.detach().numpy()
+
     # TODO: make these adjustable
     optimizer = getattr(devo, args.optimizer_name)
 
-    # # Using Adaptive-DEs
-    optimizer.run(
-        episodes_num,
-        population_size,  # population size
-        scaling_factor,  # scaling factor
-        crossover_rate,  # crossover rate
-        agent.objective_func,
-        problem_size,  # problem size
-        -100,  # unused value
-        100,  # unused value
-        x_c,
-        y_c,
-        agent.results_callback  # no results callback needed
-    )
+    generations = episodes_num // population_size
+
+    # Runs 1 generation of DE at a time, using previous run's out population
+    # as an input for the next one
+    if should_recycle_population:
+        for g in range(generations):
+            # # Using Adaptive-DEs
+            optimizer.run(
+                population_size,
+                population_size,  # population size
+                scaling_factor,  # scaling factor
+                crossover_rate,  # crossover rate
+                agent.objective_func,
+                problem_size,  # problem size
+                -100,  # unused value
+                100,  # unused value
+                x_c,
+                y_c,
+                agent.results_callback  # no results callback needed
+            )
+
+            x_c = agent.out_population.ctypes.data_as(
+                c.POINTER(c.c_double))
+            y_c = agent.out_fitnesses.ctypes.data_as(
+                c.POINTER(c.c_double))
+    else:
+        # # Using Adaptive-DEs
+        optimizer.run(
+            episodes_num,
+            population_size,  # population size
+            scaling_factor,  # scaling factor
+            crossover_rate,  # crossover rate
+            agent.objective_func,
+            problem_size,  # problem size
+            -100,  # unused value
+            100,  # unused value
+            x_c,
+            y_c,
+            agent.results_callback  # no results callback needed
+        )
 
     # Get mins - inverted in output
     print("min_fitness: ", agent.min_reward)
@@ -314,7 +383,8 @@ if __name__ == '__main__':
                         help='Choose hidden layer size of actions during episode (default: {})'.format(
                             DEFAULT_HIDDEN_LAYER_SIZE)
                         )
-
+    parser.add_argument('--recycle-population', action='store_true', default=False,
+                        help='Recycles population each generation and uses it as input for the next generation\'s initial population (default: {})'.format(False))
     args = parser.parse_args()
 
     run(args)

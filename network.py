@@ -29,11 +29,12 @@ class Net(nn.Sequential):
         self.min_weights = None
 
     def forward(self, x):
+        # print("X_in ", x)
         x = torch.sigmoid(self.fc1(x))
         x = torch.sigmoid(self.fc2(x))
         x = torch.sigmoid(self.fc3(x))
+        # print("X ", x)
         return x
-        # return F.log_softmax(x, dim=1)
 
     def backward(self, population_best_fit_individual):
         self.update_weights_from_vec(population_best_fit_individual)
