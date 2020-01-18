@@ -65,10 +65,10 @@ class Agent():
     def objective_func(self, vec, dimension):
         model = self.model
         self.t = self.t + 1
-        weights_vec = np.zeros((dimension,), dtype='float32')
+        weights_vec = np.zeros((dimension,), dtype='float64')
         # gather data
         for i in range(dimension):
-            v = np.float32(vec[i])
+            v = np.float64(vec[i])
             if not math.isnan(v):
                 weights_vec[i] = v
             else:
@@ -113,6 +113,8 @@ class Agent():
 
         rewards = []
         episode_duration = 0
+        total_steps = 0
+        max_steps = 200  # TODO: make this read from the steps value
         for t in range(steps):
             episode_duration += 1
             if should_render or t % 20 == 0:
@@ -139,6 +141,7 @@ class Agent():
                 (observations[1:, ], np.expand_dims(observation, axis=0)))
 
             rewards.append(reward)  # TODO: update reward over time somehow?
+            total_steps = t
             if done:
                 if should_render:
                     print("Episode finished after {} steps. reward: {}, info: {}".format(
@@ -157,34 +160,37 @@ class Agent():
         # print("rewards", rewards)
 
         # TODO: fixme
-        return sum(rewards)
+        # return sum(rewards)
 
         # # NOTE: Various stratgies for handling rewards:
-        # reward_values = [
-        #     reward_sum,  # the sum of all rewards for the episode
-        #     avg_reward,  # use mean reward as output, ignores time
-        #     reward_max,  # the maximum reward value for the episode
-        #     reward_time_scaled_sum,  # the time scaled sum of rewards
-        #     reward_time_scaled_sum / episode_duration  # the time scaled mean of rewards
-        # ]
+        reward_values = [
+            reward_sum,  # the sum of all rewards for the episode
+            avg_reward,  # use mean reward as output, ignores time
+            reward_max,  # the maximum reward value for the episode
+            reward_time_scaled_sum,  # the time scaled sum of rewards
+            reward_time_scaled_sum / episode_duration  # the time scaled mean of rewards
+        ]
 
-        # if self.reward_reducer_type in REWARD_REDUCERS:
-        #     resulting_reward = reward_values[REWARD_REDUCERS.index(
-        #         self.reward_reducer_type)]
-        # else:
-        #     if self.log_level > 1:
-        #         print("Warning: reward reducer type not found: ",
-        #               self.reward_reducer_type, ".  Using default 'sum'")
-        #     resulting_reward = reward_values[0]
+        if self.reward_reducer_type in REWARD_REDUCERS:
+            resulting_reward = reward_values[REWARD_REDUCERS.index(
+                self.reward_reducer_type)]
+        else:
+            if self.log_level > 1:
+                print("Warning: reward reducer type not found: ",
+                      self.reward_reducer_type, ".  Using default 'sum'")
+            resulting_reward = reward_values[0]
 
         # # save latest observations to memory
-        # self.memory = observations
+        self.memory = observations
+
+        # Scale based on duration
+        resulting_reward = resulting_reward - (max_steps - total_steps)
 
         # # When games require inverted rewards or "maximize" flag is used
-        # if self.reward_inversion:
-        #     return -resulting_reward
-        # else:
-        #     return resulting_reward
+        if self.reward_inversion:
+            return -resulting_reward
+        else:
+            return resulting_reward
 
     # Run forever
     def run_forever(self, steps=100000):
@@ -199,12 +205,12 @@ class Agent():
         for i in range(0, population_size * problem_size):
             row = i // problem_size
             col = i % problem_size
-            self.out_population[row][col] = population[i]
+            self.out_population[row][col] = np.float64(population[i])
 
         # Store fitness values
         for j in range(0, population_size):
             f = fitness_values[j]
-            self.out_fitnesses[j] = f
+            self.out_fitnesses[j] = np.float64(f)
         return
 
 
@@ -213,6 +219,7 @@ def run(args):
     observation = env.reset()
     steps_per_episode = args.steps
     model_file_output_path = args.from_file
+    should_recycle_population = args.recycle_population
 
     # N is episode steps length; D_in is input observation dimension;
     # H is hidden layer dimension; D_out is output action space dimension.
@@ -251,8 +258,8 @@ def run(args):
     print("problem_size: ", problem_size)
 
     # Initial population, Fitness values
-    x = torch.randn(population_size, problem_size)
-    y = torch.randn(population_size, D_out)
+    x = torch.randn(population_size, problem_size, dtype=torch.float64)
+    y = torch.randn(population_size, D_out, dtype=torch.float64)
 
     # Convert to c pointers
     x_c = x.detach().numpy().ctypes.data_as(
@@ -268,31 +275,35 @@ def run(args):
 
     generations = episodes_num // population_size
 
-    # for g in range(generations):
-    # # Using Adaptive-DEs
-    # optimizer.run(
-    #     episodes_num,
-    #     population_size,  # population size
-    #     scaling_factor,  # scaling factor
-    #     crossover_rate,  # crossover rate
-    #     agent.objective_func,
-    #     problem_size,  # problem size
-    #     -100,  # unused value
-    #     100,  # unused value
-    #     x_c,
-    #     y_c,
-    #     agent.results_callback  # no results callback needed
-    # )
+    # Runs 1 generation of DE at a time, using previous run's out population
+    # as an input for the next one
+    if should_recycle_population:
+        for g in range(generations):
+            # # Using Adaptive-DEs
+            optimizer.run(
+                population_size,
+                population_size,  # population size
+                scaling_factor,  # scaling factor
+                crossover_rate,  # crossover rate
+                agent.objective_func,
+                problem_size,  # problem size
+                -100,  # unused value
+                100,  # unused value
+                x_c,
+                y_c,
+                agent.results_callback  # no results callback needed
+            )
 
-    x_c = agent.out_population.ctypes.data_as(
-        c.POINTER(c.c_double))
-    y_c = agent.out_fitnesses.ctypes.data_as(
-        c.POINTER(c.c_double))
-
-    for g in range(generations):
+            print("OutPopulation:", agent.out_population)
+            print("OutFinesses:", agent.out_fitnesses)
+            x_c = agent.out_population.ctypes.data_as(
+                c.POINTER(c.c_double))
+            y_c = agent.out_fitnesses.ctypes.data_as(
+                c.POINTER(c.c_double))
+    else:
         # # Using Adaptive-DEs
         optimizer.run(
-            population_size,
+            episodes_num,
             population_size,  # population size
             scaling_factor,  # scaling factor
             crossover_rate,  # crossover rate
@@ -304,11 +315,6 @@ def run(args):
             y_c,
             agent.results_callback  # no results callback needed
         )
-
-        x_c = agent.out_population.ctypes.data_as(
-            c.POINTER(c.c_double))
-        y_c = agent.out_fitnesses.ctypes.data_as(
-            c.POINTER(c.c_double))
 
     # Get mins - inverted in output
     print("min_fitness: ", agent.min_reward)
@@ -369,7 +375,8 @@ if __name__ == '__main__':
                         help='Choose hidden layer size of actions during episode (default: {})'.format(
                             DEFAULT_HIDDEN_LAYER_SIZE)
                         )
-
+    parser.add_argument('--recycle-population', action='store_true', default=False,
+                        help='Recycles population each generation and uses it as input for the next generation\'s initial population (default: {})'.format(False))
     args = parser.parse_args()
 
     run(args)
