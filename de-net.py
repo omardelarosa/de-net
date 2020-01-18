@@ -170,10 +170,6 @@ class Agent():
         if self.log_level > 2:
             print("t:{}, \n\tobservations: {}, \n\tactions: {}, \n\trewards".format(
                 self.t, observations, y, rewards))
-        # print("rewards", rewards)
-
-        # TODO: fixme
-        # return sum(rewards)
 
         # # NOTE: Various stratgies for handling rewards:
         reward_values = [
@@ -197,7 +193,8 @@ class Agent():
         self.memory = observations
 
         # Scale based on duration
-        resulting_reward = resulting_reward - (max_steps - total_steps)
+        # TODO: penalize short runs - (max_steps - total_steps)
+        resulting_reward = resulting_reward
 
         # # When games require inverted rewards or "maximize" flag is used
         if self.reward_inversion:
