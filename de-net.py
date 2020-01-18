@@ -13,6 +13,11 @@ import numpy as np
 import ctypes as c
 import math
 import argparse
+import signal
+import sys
+import time
+import threading
+
 from network import Net
 
 DEFAULT_MODEL_OUT_FILE = "data/de-nn-model.pt"
@@ -25,6 +30,16 @@ DEFAULT_HIDDEN_LAYER_SIZE = 40
 DEFAULT_LOG_LEVEL = 1
 SUPPORTED_DE_OPTIMIZERS = ['DE', 'jDE', 'SHADE', 'LSHADE', 'JADE', 'CoDE']
 REWARD_REDUCERS = ['sum', 'mean', 'max', 'time_scaled_sum', 'time_scaled_mean']
+
+# Handle keyboard interrupts properly while running C optimizers
+
+
+def signal_handler(signal, frame):
+    print("\nCanceled run.")
+    sys.exit(0)
+
+
+signal.signal(signal.SIGINT, signal_handler)
 
 
 class Agent():
@@ -120,11 +135,9 @@ class Agent():
             if should_render or t % 20 == 0:
                 env.render()
             x_t = torch.from_numpy(observations).float()
-            # print("Observations: ", observations)
-            # for p in model.named_parameters():
-            #     print("p: ", p)
+
             y = model(x_t)  # get action list
-            # print("Y: ", y)
+
             action_f = y[-1].item()  # get last action in list
 
             # # TODO: investigate the cause of nan values
@@ -294,8 +307,6 @@ def run(args):
                 agent.results_callback  # no results callback needed
             )
 
-            print("OutPopulation:", agent.out_population)
-            print("OutFinesses:", agent.out_fitnesses)
             x_c = agent.out_population.ctypes.data_as(
                 c.POINTER(c.c_double))
             y_c = agent.out_fitnesses.ctypes.data_as(
